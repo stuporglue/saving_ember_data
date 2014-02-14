@@ -1,0 +1,237 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <title>Ember-Data hasMany Saving Weirdness</title>
+    </head>
+    <body>
+        <script type='text/x-handlebars'>
+            <h1>Trying to understand hasMany/belongsTo</h1>
+            <p>
+            I'm having a hard time understanding how to save parent-child (hasMany/belongsTo) relatonships in Ember-Data.
+            Records don't get dirty when I think they should, and saving records makes relationships disapear.
+            </p>
+            <h2>These processes lose the Parent to Child relationship</h2>
+            <button {{action p2cscsp target='controller'}}>Set Child's parent. Save Child. Save Parent</button><br>
+            <button {{action p2csp target='controller'}}>Set Child's parent. Save Parent.</button><br>
+            <button {{action c2psp target='controller'}}>Set Parent's child. Save Parent.</button><br>
+            <button {{action c2pscsp target='controller'}}>Set Parent's child. Save Child. Save Parent.</button><br>
+
+            <h2>These leave everything non-dirty, but saving parent afterwards loses relationships</h2>
+            <button {{action p2csc target='controller'}}>Set Child's parent. Save Child.</button><br>
+            <button {{action c2psc target='controller'}}>Set Parent's child. Save Child.</button><br>
+
+            <hr>
+            <h2>Tools</h2>
+            <button {{action sp target='controller'}}>Save Parent.</button><br>
+            <button {{action sc target='controller'}}>Save Child.</button><br>
+            <button {{action pd target='controller'}}>Dirty Parent.</button><br>
+            <button {{action cd target='controller'}}>Dirty  Child.</button><br>
+            <div>{{outlet}}</div>
+        </script>
+
+
+        <script src="//cdnjs.cloudflare.com/ajax/libs/handlebars.js/1.0.0/handlebars.js"></script>
+        <script src="//ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+
+        <!-- Ember core -->
+        <script src="//builds.emberjs.com/tags/v1.3.1/ember.js"></script>
+        <!-- Ember Data -->
+        <script src="//builds.emberjs.com/tags/v1.0.0-beta.5/ember-data.js"></script>
+
+        <script type='text/javascript'>
+
+            // Make our Ember application
+            MF = Ember.Application.create();
+
+            // We're using ember-data...
+            MF.Store = DS.Store.extend({
+                adapter: DS.FixtureAdapter
+            });
+
+            // Two objects, a parent...
+            MF.Parent = DS.Model.extend({
+                name: DS.attr(),
+                childs: DS.hasMany('child')
+            });
+            MF.Parent.FIXTURES = []; // ...with fixtures
+
+            // ...and a child
+            MF.Child = DS.Model.extend({
+                name: DS.attr(),
+                parent: DS.belongsTo('parent')
+            });
+            MF.Child.FIXTURES = [];
+
+            // Here's our controller.
+            MF.ApplicationController = Ember.ObjectController.extend({
+                actions: {
+
+                // Add the parent to the child, save the child 
+                p2csc: function(){
+                    var self = this;
+                    return this.makeChilds().then(function(){
+                        self.logChildsState("Before p2csc");
+                        MF.child.set('parent',MF.parent);
+                        self.logChildsState("After setting child's parent");
+                        return MF.child.save().then(function(){
+                            self.logChildsState("After saving child");
+                        });
+                    });
+                },
+
+                // Add the parent to the child, save the parent
+                p2csp: function(){
+                    var self = this;
+                    return this.makeChilds().then(function(){
+                        self.logChildsState("Before p2csp");
+                        MF.child.set('parent',MF.parent);
+                        self.logChildsState("After setting child's parent");
+                        return MF.parent.save().then(function(){
+                            self.logChildsState("After saving parent");
+                        });
+                    });
+                },
+
+                // Add the child to the parent, save the parent
+                c2psp: function(){
+                    var self = this;
+                    return this.makeChilds().then(function(){
+                        self.logChildsState("Before c2psp");
+                        MF.parent.get('childs').pushObject(MF.child);
+                        self.logChildsState("Before Saving parent");
+                        return MF.parent.save().then(function(){
+                            self.logChildsState("After Saving parent");
+                        });
+                    });
+                },
+
+                // Add the child to the parent, save the child
+                c2psc: function(){
+                    var self = this;
+                    return this.makeChilds().then(function(){
+                        self.logChildsState("Before c2psc");
+                        MF.parent.get('childs').pushObject(MF.child);
+                        self.logChildsState("After setting child's parent");
+                        return MF.child.save().then(function(){
+                            self.logChildsState("After saving child");
+                        });
+                    });
+                },
+
+                sp: function(){
+                    var self = this;
+                    self.logChildsState("Before saving parent");
+                    return MF.parent.save().then(function(){
+                        self.logChildsState("After saving parent");
+                    });
+                },
+
+                sc: function(){
+                    var self = this;
+                    self.logChildsState("Before saving child");
+                    return MF.child.save().then(function(){
+                        self.logChildsState("After saving child");
+                    });
+                },
+
+                pd: function(){
+                    MF.parent.set('name',"Dirty now");  // set an attribute to dirty it
+                    this.logChildsState("After Dirtying Parent");
+                },
+
+                cd: function(){
+                    MF.child.set('name',"Dirty now");  // set an attribute to dirty it
+                    this.logChildsState("After Child Parent");
+                },
+
+                p2cscsp: function(){
+                    var self = this;
+                    return this.makeChilds().then(function(){
+                        self.logChildsState("Before p2csc");
+                        MF.child.set('parent',MF.parent);
+                        self.logChildsState("After setting child's parent");
+                        return MF.child.save().then(function(){
+                            self.logChildsState("After saving child");
+                            return MF.parent.save().then(function(){
+                                self.logChildsState("After saving parent");
+                            });
+                        });
+                    });
+                },
+
+                c2pscsp: function(){
+                    var self = this;
+                    return this.makeChilds().then(function(){
+                        self.logChildsState("Before c2psc");
+                        MF.parent.get('childs').pushObject(MF.child);
+                        self.logChildsState("After setting child's parent");
+                        return MF.child.save().then(function(){
+                            self.logChildsState("After saving child");
+                            return MF.parent.save().then(function(){
+                                self.logChildsState("After saving parent");
+                            });
+                        });
+                    });
+                },
+
+
+
+                junk: function(){
+
+                        promise.then(function(){
+                            self.logChildsState("After setting parents child and saving",parent,child);
+                            child.set('parent',parent);
+                            // both have refs to each other, but neither is dirty -- why not? 
+                            self.logChildsState("After setting childs parent, but before saving",parent,child);
+                            return child.save();
+                        });
+
+                        promise.then(function(){
+                            // after initial save the parent is dirty
+                            self.logChildsState("After initial save",parent,child);
+                            return parent.save(); 
+                        });
+
+                        promise.then(function(){
+                            // after parent save both are dirty?
+                            self.logChildsState("After parent save",parent,child);
+                            parent.get('childs').pushObject(child);
+                            self.logChildsState("After setting parents child, but before saving",parent,child);
+                            return parent.save();
+                        });
+
+                        promise.then(function(){
+                            self.logChildsState("After setting childs parent, after saving",parent,child);
+                            child.set('parent',parent);
+                            parent.get('childs').pushObject(child);
+                            self.logChildsState("After setting parent and child, before saving",parent,child);
+                            return Ember.RSVP.all([parent.save(),child.save()]);
+                        });
+
+                        promise.then(function(){
+                            self.logChildsState("After setting parent and child, after saving",parent,child);
+                        });
+                    }
+            },
+            makeChilds: function(line){
+                var self = this;
+                MF.parent = this.store.createRecord('parent',{name:'Parent'});
+                MF.child = this.store.createRecord('child',{name:'Child'});
+
+                self.logChildsState("Before initial save");
+                return Ember.RSVP.all([MF.parent.save(),MF.child.save()]);
+            },
+
+            // Print the state of things to the console
+            logChildsState: function(when,parent,child){
+                console.log("----------------" + when + "----------------");
+                console.log("\tChilds parents: " + MF.child.get('parent')); 
+                console.log("\tChild dirty: " + MF.child.get('isDirty')); 
+                console.log("\tParent childs ids: " + MF.parent.get('childs').toArray());
+                console.log("\tParent dirty: " + MF.parent.get('isDirty'));
+            }
+
+            });
+        </script>
+    </body>
+</html>
